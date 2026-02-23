@@ -1,0 +1,91 @@
+╔════════════════════════════════════════════════════════════════╗
+║           MARKET AUTOMATION - Local Office Setup               ║
+╚════════════════════════════════════════════════════════════════╝
+
+📋 WHAT YOU NEED:
+   ✓ Python 3.8+ (installed on your machine)
+   ✓ This folder with all files
+   ✓ Office network (WiFi or LAN)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 HOW TO RUN:
+
+   OPTION A (Easy) - Double-click:
+   ────────────────────────────────
+   1. Double-click: RUN_SERVER.bat
+   2. Wait for server to start
+   3. Share the URL shown in terminal
+
+   OPTION B (Manual) - Command line:
+   ────────────────────────────────
+   1. Open PowerShell in this folder
+   2. Run: pip install -r requirements.txt
+   3. Run: python app4.py
+   4. Copy the network URL shown
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 FINDING YOUR OFFICE IP:
+
+   1. When server runs, it shows:
+      "🌐 Open http://localhost:5000"
+
+   2. Replace "localhost" with your IP:
+      - Windows: Open PowerShell → ipconfig → IPv4 Address
+      - Example: 192.168.1.100:5000
+
+   3. Share with office: http://192.168.1.100:5000
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📱 COLLEAGUES ACCESSING:
+
+   They simply open in browser:
+   http://YOUR_IP:5000
+
+   Example: http://192.168.1.100:5000
+
+   Note: They need to be on same WiFi/Network
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️  SECURITY NOTE:
+
+   This is NOT secure for internet/public use.
+   Only for office internal network!
+
+   When finished, close the terminal window
+   (Ctrl+C or close PowerShell)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 FOLDER FILES NEEDED:
+
+   ✓ app4.py (main server)
+   ✓ market.py (processing logic)
+   ✓ functions.py (helpers)
+   ✓ templates/index.html (web interface)
+   ✓ uploads/ (folder for files)
+   ✓ outputs/ (folder for results)
+   ✓ requirements.txt (dependencies)
+   ✓ RUN_SERVER.bat (easy launcher)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔧 TROUBLESHOOTING:
+
+   "Port 5000 already in use?"
+   → Change port in app4.py line 397:
+     app.run(host='0.0.0.0', port=8080, debug=True)
+
+   "Colleagues can't access?"
+   → Check firewall allows port 5000
+   → Make sure they use YOUR_IP not localhost
+   → Both must be on same network
+
+   "Python not found?"
+   → Install Python from python.org
+   → Add to PATH during installation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

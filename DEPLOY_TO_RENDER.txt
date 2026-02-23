@@ -1,0 +1,127 @@
+╔═══════════════════════════════════════════════════════════════════╗
+║         DEPLOY TO RENDER.COM - 2 MINUTES (FREE!)                  ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+✅ ZERO SETUP - Sirf folder push karo, automatic deploy!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 PRE-REQUISITES:
+
+   1. GitHub account (free at github.com)
+   2. Render account (free at render.com - login with GitHub)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🚀 STEP 1: Push Code to GitHub
+
+   1. Terminal mein:
+      ```
+      git init
+      git add .
+      git commit -m "Market Automation App"
+      ```
+
+   2. GitHub par jao → New Repository
+      - Name: "market-vehicle-hiring"
+      - Public select karo
+      - Create repository
+
+   3. Terminal mein (GitHub page se copy-paste):
+      ```
+      git remote add origin https://github.com/YOUR_USERNAME/market-vehicle-hiring.git
+      git branch -M main
+      git push -u origin main
+      ```
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎯 STEP 2: Deploy on Render.com
+
+   1. render.com par jao (GitHub se login karo)
+   
+   2. Dashboard → New Web Service
+   
+   3. Select repo: "market-vehicle-hiring"
+   
+   4. Fill form:
+      - Name: market-automation (ya koi bhi)
+      - Runtime: Python 3.11
+      - Build Command: `pip install -r requirements.txt`
+      - Start Command: `gunicorn app4:app`
+   
+   5. Click "Deploy"
+   
+   6. Wait 3-5 minutes...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ DONE! Aapka link:
+
+   https://market-automation.onrender.com
+
+   (Exact name based on what aapne naam rakha)
+
+   YEH LINK SHARE KAR DO KISI KO BHI!
+   Wo Chrome mein khol le, instant chal jaega!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚙️ ENVIRONMENT VARIABLES SET KARNE KE LIYE:
+
+   Render Dashboard mein:
+   
+   1. Service select karo
+   2. Environment → Add Variable
+   3. Add karo:
+      - Key: OM_EMAIL
+        Value: vidit.kalra@olsc.in
+      
+      - Key: OM_PASSWORD
+        Value: v#1234K%
+
+   4. Save & Auto-Deploy
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 FILES INCLUDED:
+
+   ✓ Procfile - Server configuration
+   ✓ runtime.txt - Python version
+   ✓ requirements.txt - All dependencies
+   ✓ app4.py - Flask app
+   ✓ market.py - Processing logic
+   ✓ templates/index.html - Web interface
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🆓 FREE TIER INFO:
+
+   • No credit card needed
+   • 750 free hours/month (24/7 running!)
+   • Auto-start on new deploys
+   • HTTPS included
+   • Unlimited collaborators
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔄 CODE UPDATE KARNE KE BAAD:
+
+   Terminal mein:
+   ```
+   git add .
+   git commit -m "Update"
+   git push
+   ```
+   
+   Render automatically redeploy kar dega! ✓
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❓ ALTERNATIVE FREE HOSTING:
+
+   ✓ Railway.app (better free tier)
+   ✓ PythonAnywhere.com (easier for Python)
+   ✓ Heroku (€7/month minimum now)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
