@@ -32,3 +32,13 @@ uploads/*
 outputs/*
 !uploads/.gitkeep
 !outputs/.gitkeep
+
+# Large data files - don't push to repo
+*.xlsx
+*.csv
+*.CSV
+
+# Instruction text files
+DEPLOY_TO_RENDER.txt
+FINAL_STEPS.txt
+SETUP_INSTRUCTIONS.txt
