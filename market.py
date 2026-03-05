@@ -792,8 +792,17 @@ else:
 # Create BEAUTIFUL summary structure with proper tables
 summary_data = []
 
-# TABLE 1: DEC - 2025 (Main Metrics)
-summary_data.append(['DEC - 2025', '', ''])
+# TABLE 1: Dynamic Month-Year heading (detected from REQ_DATE column)
+import calendar
+if 'target_month' in locals() and 'target_year' in locals() and target_month is not None and target_year is not None:
+    month_year_label = f"{calendar.month_abbr[target_month].upper()} {target_year}"
+else:
+    # Fallback: use current month/year
+    import datetime
+    _now = datetime.datetime.now()
+    month_year_label = f"{calendar.month_abbr[_now.month].upper()} {_now.year}"
+print(f" 📅 Summary sheet heading: {month_year_label}")
+summary_data.append([month_year_label, '', ''])
 summary_data.append(['TOTAL GENERATE REQ', total_generate_req, ''])
 summary_data.append(['TOTAL PLACED VEHICLE', total_placed_vehicle, ''])
 summary_data.append(['TOTAL ATT', total_att, ''])
