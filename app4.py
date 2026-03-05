@@ -99,18 +99,22 @@ def fetch_report():
     Body JSON: { "report_key": "work_summary", "from_date": "2025-01-01", "to_date": "2025-01-31" }
     Dates only needed for reports with needs_dates=True
     """
-    data = request.get_json()
-    report_key = data.get('report_key')
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        report_key = data.get('report_key')
 
-    if report_key not in FETCHABLE_REPORTS:
-        return jsonify({'error': f'Unknown report: {report_key}'}), 400
+        if not report_key or report_key not in FETCHABLE_REPORTS:
+            return jsonify({'error': f'Unknown report: {report_key}'}), 400
 
-    report = FETCHABLE_REPORTS[report_key]
-    from_date = data.get('from_date')
-    to_date = data.get('to_date')
+        report = FETCHABLE_REPORTS[report_key]
+        from_date = data.get('from_date')
+        to_date = data.get('to_date')
 
-    if report['needs_dates'] and (not from_date or not to_date):
-        return jsonify({'error': 'from_date and to_date required'}), 400
+        if report['needs_dates'] and (not from_date or not to_date):
+            return jsonify({'error': 'from_date and to_date required'}), 400
+
+    except Exception as e:
+        return jsonify({'error': f'Bad request: {str(e)}'}), 400
 
     try:
         # ── Login to OM Insights ──
