@@ -94,98 +94,100 @@ def index():
 # ═══════════════════════════════════════════════
 @app.route('/api/fetch-report', methods=['POST'])
 def fetch_report():
-    """
-    Fetches a report from OM Insights API.
-    Body JSON: { "report_key": "work_summary", "from_date": "2025-01-01", "to_date": "2025-01-31" }
-    Dates only needed for reports with needs_dates=True
-    """
+    """Wrapper that guarantees JSON response — never Flask's HTML 500 page."""
     try:
-        data = request.get_json(force=True, silent=True) or {}
-        report_key = data.get('report_key')
-
-        if not report_key or report_key not in FETCHABLE_REPORTS:
-            return jsonify({'error': f'Unknown report: {report_key}'}), 400
-
-        report = FETCHABLE_REPORTS[report_key]
-        from_date = data.get('from_date')
-        to_date = data.get('to_date')
-
-        if report['needs_dates'] and (not from_date or not to_date):
-            return jsonify({'error': 'from_date and to_date required'}), 400
-
+        return _do_fetch()
     except Exception as e:
-        return jsonify({'error': f'Bad request: {str(e)}'}), 400
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[FETCH ERROR] {tb}")
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}', 'traceback': tb[-800:]}), 500
 
-    try:
-        # ── Login to OM Insights ──
-        session = requests.Session()
-        login_resp = session.post(
-            f"{OM_BASE_URL}/api/session",
-            json={"username": OM_EMAIL, "password": OM_PASSWORD},
-            headers={"Content-Type": "application/json"},
-            timeout=30
-        )
-        if login_resp.status_code not in [200, 202]:
-            return jsonify({'error': f'OM Insights login failed: {login_resp.status_code}'}), 500
 
-        # ── Build parameters ──
-        parameters = []
-        for param in report['params']:
-            if param['type'] == 'category':
-                parameters.append({
-                    "type": param['type'],
-                    "target": ["variable", ["template-tag", param['name']]],
-                    "value": param['value']
-                })
-            elif param['type'] == 'date/single':
-                date_value = from_date if param.get('role') == 'from' else to_date
-                parameters.append({
-                    "type": param['type'],
-                    "target": ["variable", ["template-tag", param['name']]],
-                    "value": date_value
-                })
+def _do_fetch():
+    """Actual fetch logic — called by fetch_report."""
+    data = request.get_json(force=True, silent=True) or {}
+    report_key = data.get('report_key')
 
-        payload = {"parameters": parameters} if parameters else {}
+    if not report_key or report_key not in FETCHABLE_REPORTS:
+        return jsonify({'error': f'Unknown report: {report_key}'}), 400
 
-        # ── Download report ──
-        download_url = f"{OM_BASE_URL}/api/card/{report['card_id']}/query/{report['format']}"
-        file_resp = session.post(
-            download_url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-            timeout=180
-        )
+    report = FETCHABLE_REPORTS[report_key]
+    from_date = data.get('from_date')
+    to_date = data.get('to_date')
 
-        if file_resp.status_code != 200:
-            return jsonify({'error': f'Download failed: {file_resp.status_code} — {file_resp.text[:200]}'}), 500
+    if report['needs_dates'] and (not from_date or not to_date):
+        return jsonify({'error': 'from_date and to_date required'}), 400
 
-        # ── Save file ──
-        fetch_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'fetched')
-        os.makedirs(fetch_dir, exist_ok=True)
+    # ── Login to OM Insights ──
+    print(f"[FETCH] Starting fetch for: {report_key}")
+    session = requests.Session()
+    login_resp = session.post(
+        f"{OM_BASE_URL}/api/session",
+        json={"username": OM_EMAIL, "password": OM_PASSWORD},
+        headers={"Content-Type": "application/json"},
+        timeout=30
+    )
+    print(f"[FETCH] Login status: {login_resp.status_code}")
+    if login_resp.status_code not in [200, 202]:
+        return jsonify({'error': f'OM Insights login failed: {login_resp.status_code} — {login_resp.text[:200]}'}), 500
 
-        if report['needs_dates']:
-            filename = f"{report_key}_{from_date}_to_{to_date}.{report['format']}"
-        else:
-            filename = f"{report_key}.{report['format']}"
+    # ── Build parameters ──
+    parameters = []
+    for param in report['params']:
+        if param['type'] == 'category':
+            parameters.append({
+                "type": param['type'],
+                "target": ["variable", ["template-tag", param['name']]],
+                "value": param['value']
+            })
+        elif param['type'] == 'date/single':
+            date_value = from_date if param.get('role') == 'from' else to_date
+            parameters.append({
+                "type": param['type'],
+                "target": ["variable", ["template-tag", param['name']]],
+                "value": date_value
+            })
 
-        filepath = os.path.join(fetch_dir, filename)
-        with open(filepath, 'wb') as f:
-            f.write(file_resp.content)
+    payload = {"parameters": parameters} if parameters else {}
 
-        file_size_kb = os.path.getsize(filepath) / 1024
+    # ── Download report ──
+    download_url = f"{OM_BASE_URL}/api/card/{report['card_id']}/query/{report['format']}"
+    print(f"[FETCH] Downloading from: {download_url}")
+    file_resp = session.post(
+        download_url,
+        json=payload,
+        headers={"Content-Type": "application/json"},
+        timeout=180
+    )
+    print(f"[FETCH] Download status: {file_resp.status_code}")
 
-        return jsonify({
-            'success': True,
-            'filename': filename,
-            'filepath': filepath,
-            'size_kb': round(file_size_kb, 1),
-            'report_name': report['name']
-        })
+    if file_resp.status_code != 200:
+        return jsonify({'error': f'Download failed: {file_resp.status_code} — {file_resp.text[:300]}'}), 500
 
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'OM Insights request timed out (180s). Try again.'}), 500
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    # ── Save file ──
+    fetch_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'fetched')
+    os.makedirs(fetch_dir, exist_ok=True)
+
+    if report['needs_dates']:
+        filename = f"{report_key}_{from_date}_to_{to_date}.{report['format']}"
+    else:
+        filename = f"{report_key}.{report['format']}"
+
+    filepath = os.path.join(fetch_dir, filename)
+    with open(filepath, 'wb') as f:
+        f.write(file_resp.content)
+
+    file_size_kb = os.path.getsize(filepath) / 1024
+    print(f"[FETCH] Saved: {filename} ({file_size_kb:.1f} KB)")
+
+    return jsonify({
+        'success': True,
+        'filename': filename,
+        'filepath': filepath,
+        'size_kb': round(file_size_kb, 1),
+        'report_name': report['name']
+    })
 
 
 # ═══════════════════════════════════════════════
