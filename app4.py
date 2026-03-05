@@ -62,15 +62,6 @@ FETCHABLE_REPORTS = {
         "params": [],
         "format": "csv",
         "needs_dates": False
-    },
-    "branch_master": {
-        "name": "BRANCH MASTER",
-        "card_id": "1658",
-        "params": [
-            {"name": "COMPANY_CODE", "type": "category", "value": "400021"}
-        ],
-        "format": "xlsx",
-        "needs_dates": False
     }
 }
 
@@ -130,7 +121,7 @@ def fetch_report():
             headers={"Content-Type": "application/json"},
             timeout=30
         )
-        if login_resp.status_code != 200:
+        if login_resp.status_code not in [200, 202]:
             return jsonify({'error': f'OM Insights login failed: {login_resp.status_code}'}), 500
 
         # ── Build parameters ──
