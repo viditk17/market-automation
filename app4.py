@@ -27,6 +27,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
 jobs = {}
+fetch_jobs = {}  # for async broker_master / no-date fetches
 
 # ── OM Insights credentials (from environment variables or .env file) ──
 OM_EMAIL = os.getenv('OM_EMAIL', 'vidit.kalra@olsc.in')
@@ -90,109 +91,140 @@ def index():
 
 
 # ═══════════════════════════════════════════════
-# AUTO-FETCH ENDPOINT — downloads from OM Insights
+# AUTO-FETCH ENDPOINT — launches background thread, returns job_id immediately
 # ═══════════════════════════════════════════════
 @app.route('/api/fetch-report', methods=['POST'])
 def fetch_report():
-    """Wrapper that guarantees JSON response — never Flask's HTML 500 page."""
+    """Starts a background fetch job and returns job_id immediately."""
     try:
-        return _do_fetch()
+        data = request.get_json(force=True, silent=True) or {}
+        report_key = data.get('report_key')
+
+        if not report_key or report_key not in FETCHABLE_REPORTS:
+            return jsonify({'error': f'Unknown report: {report_key}'}), 400
+
+        report = FETCHABLE_REPORTS[report_key]
+        from_date = data.get('from_date')
+        to_date = data.get('to_date')
+
+        if report['needs_dates'] and (not from_date or not to_date):
+            return jsonify({'error': 'from_date and to_date required'}), 400
+
+        # Start background thread and return job_id immediately
+        fj_id = str(uuid.uuid4())[:8]
+        fetch_jobs[fj_id] = {'status': 'running', 'filename': None, 'filepath': None,
+                             'size_kb': None, 'report_name': report['name'], 'error': None}
+
+        t = threading.Thread(
+            target=_run_fetch_bg,
+            args=(fj_id, report, report_key, from_date, to_date)
+        )
+        t.daemon = True
+        t.start()
+
+        return jsonify({'job_id': fj_id})
+
     except Exception as e:
-        import traceback
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
+
+
+def _run_fetch_bg(fj_id, report, report_key, from_date, to_date):
+    """Runs in background thread: login, download, save file."""
+    try:
+        print(f"[FETCH-BG] Starting fetch for: {report_key}")
+        session = requests.Session()
+
+        # Login
+        login_resp = session.post(
+            f"{OM_BASE_URL}/api/session",
+            json={"username": OM_EMAIL, "password": OM_PASSWORD},
+            headers={"Content-Type": "application/json"},
+            timeout=30
+        )
+        print(f"[FETCH-BG] Login status: {login_resp.status_code}")
+        if login_resp.status_code not in [200, 202]:
+            fetch_jobs[fj_id]['status'] = 'failed'
+            fetch_jobs[fj_id]['error'] = f'Login failed: {login_resp.status_code} — {login_resp.text[:200]}'
+            return
+
+        # Build parameters
+        parameters = []
+        for param in report['params']:
+            if param['type'] == 'category':
+                parameters.append({
+                    "type": param['type'],
+                    "target": ["variable", ["template-tag", param['name']]],
+                    "value": param['value']
+                })
+            elif param['type'] == 'date/single':
+                date_value = from_date if param.get('role') == 'from' else to_date
+                parameters.append({
+                    "type": param['type'],
+                    "target": ["variable", ["template-tag", param['name']]],
+                    "value": date_value
+                })
+
+        payload = {"parameters": parameters} if parameters else {}
+
+        # Download
+        download_url = f"{OM_BASE_URL}/api/card/{report['card_id']}/query/{report['format']}"
+        print(f"[FETCH-BG] Downloading: {download_url}")
+        file_resp = session.post(
+            download_url,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=300
+        )
+        print(f"[FETCH-BG] Download status: {file_resp.status_code}")
+
+        if file_resp.status_code != 200:
+            fetch_jobs[fj_id]['status'] = 'failed'
+            fetch_jobs[fj_id]['error'] = f'Download failed: {file_resp.status_code} — {file_resp.text[:300]}'
+            return
+
+        # Save file
+        fetch_dir = os.path.join(BASE_DIR, 'uploads', 'fetched')
+        os.makedirs(fetch_dir, exist_ok=True)
+
+        filename = (f"{report_key}_{from_date}_to_{to_date}.{report['format']}"
+                    if report['needs_dates'] else f"{report_key}.{report['format']}")
+        filepath = os.path.join(fetch_dir, filename)
+        with open(filepath, 'wb') as f:
+            f.write(file_resp.content)
+
+        size_kb = round(os.path.getsize(filepath) / 1024, 1)
+        print(f"[FETCH-BG] Saved: {filename} ({size_kb} KB)")
+
+        fetch_jobs[fj_id].update({'status': 'completed', 'filename': filename,
+                                   'filepath': filepath, 'size_kb': size_kb})
+
+    except Exception as e:
         tb = traceback.format_exc()
-        print(f"[FETCH ERROR] {tb}")
-        return jsonify({'error': f'{type(e).__name__}: {str(e)}', 'traceback': tb[-800:]}), 500
+        print(f"[FETCH-BG ERROR] {tb}")
+        fetch_jobs[fj_id]['status'] = 'failed'
+        fetch_jobs[fj_id]['error'] = f'{type(e).__name__}: {str(e)}'
 
 
-def _do_fetch():
-    """Actual fetch logic — called by fetch_report."""
-    data = request.get_json(force=True, silent=True) or {}
-    report_key = data.get('report_key')
-
-    if not report_key or report_key not in FETCHABLE_REPORTS:
-        return jsonify({'error': f'Unknown report: {report_key}'}), 400
-
-    report = FETCHABLE_REPORTS[report_key]
-    from_date = data.get('from_date')
-    to_date = data.get('to_date')
-
-    if report['needs_dates'] and (not from_date or not to_date):
-        return jsonify({'error': 'from_date and to_date required'}), 400
-
-    # ── Login to OM Insights ──
-    print(f"[FETCH] Starting fetch for: {report_key}")
-    session = requests.Session()
-    login_resp = session.post(
-        f"{OM_BASE_URL}/api/session",
-        json={"username": OM_EMAIL, "password": OM_PASSWORD},
-        headers={"Content-Type": "application/json"},
-        timeout=30
-    )
-    print(f"[FETCH] Login status: {login_resp.status_code}")
-    if login_resp.status_code not in [200, 202]:
-        return jsonify({'error': f'OM Insights login failed: {login_resp.status_code} — {login_resp.text[:200]}'}), 500
-
-    # ── Build parameters ──
-    parameters = []
-    for param in report['params']:
-        if param['type'] == 'category':
-            parameters.append({
-                "type": param['type'],
-                "target": ["variable", ["template-tag", param['name']]],
-                "value": param['value']
-            })
-        elif param['type'] == 'date/single':
-            date_value = from_date if param.get('role') == 'from' else to_date
-            parameters.append({
-                "type": param['type'],
-                "target": ["variable", ["template-tag", param['name']]],
-                "value": date_value
-            })
-
-    payload = {"parameters": parameters} if parameters else {}
-
-    # ── Download report ──
-    download_url = f"{OM_BASE_URL}/api/card/{report['card_id']}/query/{report['format']}"
-    print(f"[FETCH] Downloading from: {download_url}")
-    file_resp = session.post(
-        download_url,
-        json=payload,
-        headers={"Content-Type": "application/json"},
-        timeout=180
-    )
-    print(f"[FETCH] Download status: {file_resp.status_code}")
-
-    if file_resp.status_code != 200:
-        return jsonify({'error': f'Download failed: {file_resp.status_code} — {file_resp.text[:300]}'}), 500
-
-    # ── Save file ──
-    fetch_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'fetched')
-    os.makedirs(fetch_dir, exist_ok=True)
-
-    if report['needs_dates']:
-        filename = f"{report_key}_{from_date}_to_{to_date}.{report['format']}"
+@app.route('/api/fetch-status/<fj_id>')
+def fetch_status(fj_id):
+    """Poll this endpoint to check background fetch job result."""
+    if fj_id not in fetch_jobs:
+        return jsonify({'error': 'Job not found'}), 404
+    job = fetch_jobs[fj_id]
+    if job['status'] == 'completed':
+        return jsonify({
+            'status': 'completed',
+            'filename': job['filename'],
+            'filepath': job['filepath'],
+            'size_kb': job['size_kb'],
+            'report_name': job['report_name']
+        })
+    elif job['status'] == 'failed':
+        return jsonify({'status': 'failed', 'error': job['error']})
     else:
-        filename = f"{report_key}.{report['format']}"
-
-    filepath = os.path.join(fetch_dir, filename)
-    with open(filepath, 'wb') as f:
-        f.write(file_resp.content)
-
-    file_size_kb = os.path.getsize(filepath) / 1024
-    print(f"[FETCH] Saved: {filename} ({file_size_kb:.1f} KB)")
-
-    return jsonify({
-        'success': True,
-        'filename': filename,
-        'filepath': filepath,
-        'size_kb': round(file_size_kb, 1),
-        'report_name': report['name']
-    })
+        return jsonify({'status': 'running'})
 
 
-# ═══════════════════════════════════════════════
-# SERVE FETCHED FILE (so browser can create File object)
-# ═══════════════════════════════════════════════
 @app.route('/api/fetched-file/<path:filename>')
 def serve_fetched_file(filename):
     fetch_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'fetched')
