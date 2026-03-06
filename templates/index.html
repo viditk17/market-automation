@@ -1312,17 +1312,58 @@
       const fd = document.getElementById('from-' + k).value;
       const td = document.getElementById('to-' + k).value;
       const st = document.getElementById('fetchstatus-' + k);
+      const goBtn = st.previousElementSibling;
       if (!fd || !td) { st.className = 'fetch-status error'; st.textContent = '❌ Select both dates'; return }
-      st.className = 'fetch-status loading'; st.textContent = '⏳ Fetching from OM Insights...';
+      st.className = 'fetch-status loading'; st.textContent = '⏳ Connecting to OM Insights...';
+      if (goBtn) goBtn.disabled = true;
       try {
-        const r = await fetch('/api/fetch-report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ report_key: k, from_date: fd, to_date: td }) });
-        const d = await r.json();
-        if (!r.ok || d.error) { st.className = 'fetch-status error'; st.textContent = '❌ ' + d.error; return }
-        fetchedFilePaths[k] = d.filepath; delete uploadedFiles[k];
-        st.className = 'fetch-status success'; st.textContent = '✅ ' + d.filename + ' (' + d.size_kb + ' KB)';
-        markCardDone(k, d.filename);
-        document.getElementById('fetchform-' + k).classList.remove('active');
+        // Step 1: Start background fetch job
+        const r = await fetch('/api/fetch-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ report_key: k, from_date: fd, to_date: td })
+        });
+        const raw = await r.text();
+        let startResp;
+        try { startResp = JSON.parse(raw); } catch (e) {
+          st.className = 'fetch-status error';
+          st.textContent = '❌ Server error (HTTP ' + r.status + '): ' + raw.substring(0, 150);
+          if (goBtn) goBtn.disabled = false; return;
+        }
+        if (!r.ok || startResp.error) {
+          st.className = 'fetch-status error';
+          st.textContent = '❌ ' + (startResp.error || 'Unknown error');
+          if (goBtn) goBtn.disabled = false; return;
+        }
+
+        // Step 2: Poll for result
+        const jobId = startResp.job_id;
+        st.textContent = '⏳ Downloading... (this may take 1-2 min)';
+        let attempts = 0;
+        const maxAttempts = 90;
+        while (attempts < maxAttempts) {
+          await new Promise(res => setTimeout(res, 2000));
+          attempts++;
+          const sr = await fetch('/api/fetch-status/' + jobId);
+          const sd = await sr.json();
+          if (sd.status === 'completed') {
+            fetchedFilePaths[k] = sd.filepath; delete uploadedFiles[k];
+            st.className = 'fetch-status success';
+            st.textContent = '✅ ' + sd.filename + ' (' + sd.size_kb + ' KB)';
+            markCardDone(k, sd.filename);
+            document.getElementById('fetchform-' + k).classList.remove('active');
+            if (goBtn) goBtn.disabled = false; return;
+          } else if (sd.status === 'failed') {
+            st.className = 'fetch-status error';
+            st.textContent = '❌ ' + (sd.error || 'Fetch failed');
+            if (goBtn) goBtn.disabled = false; return;
+          }
+          st.textContent = '⏳ Downloading... (' + (attempts * 2) + 's elapsed)';
+        }
+        st.className = 'fetch-status error';
+        st.textContent = '❌ Timeout: report is taking too long. Try again.';
       } catch (e) { st.className = 'fetch-status error'; st.textContent = '❌ ' + e.message }
+      if (goBtn) goBtn.disabled = false;
     }
 
     async function fetchNoDates(k) {
